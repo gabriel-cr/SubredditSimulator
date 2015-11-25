@@ -21,6 +21,23 @@ from database import Base, JSONSerialized, db
 MAX_OVERLAP_RATIO = 0.5
 MAX_OVERLAP_TOTAL = 10
 
+ro_chr_list = [
+    (259, "a"),
+    (258, "A"),
+    
+    (226, "a"),
+    (194, "A"),
+    
+    (238, "i"),
+    (206, "I"),
+    
+    (351, "s"),
+    (350, "S"),
+    
+    (355, "t"),
+    (354, "T")
+]
+
 class SubredditSimulatorText(markovify.Text):
     html_parser = HTMLParser.HTMLParser()
 
@@ -28,6 +45,10 @@ class SubredditSimulatorText(markovify.Text):
         return True
 
     def _prepare_text(self, text):
+        
+        for p in ro_chr_list:
+            text = text.replace(unichr(p[0]), p[1])
+        
         text = self.html_parser.unescape(text)
         text = text.strip()
         if not text.endswith((".", "?", "!")):
@@ -114,6 +135,39 @@ class Account(Base):
         else:
             return round(self.link_karma / float(self.num_submissions), 2)
 
+    def check_for_comment_dup(self, sid=''):
+        if db.query(Comment.id).filter(Comment.id==sid).count() > 0:
+            return 1
+        else:
+            return 0
+    
+    def add_bulk_comments(self, new_comments, store_in_db=True):
+        cnt = 0
+        add = 0
+        for comment in new_comments:
+            try:
+                comment = Comment(comment)
+                print(comment.date)
+                if self.check_for_comment_dup(comment.id) == 0:
+                    db.add(comment)
+                    add += 1
+                
+                cnt += 1
+            except:
+                pass
+            
+        print "Got " + str(cnt) + ". Added " + str(add)
+        if store_in_db:
+            db.commit()
+
+    def retrieve_comments(self):
+        subreddit = self.session.get_subreddit(self.subreddit)
+
+        for s in subreddit.get_new(limit=None):
+            sub = Submission(s)
+            print s
+            self.add_bulk_comments(self.session.get_submission(submission_id=sub.id).all_comments)
+
     def get_comments_from_site(self, limit=None, store_in_db=True):
         subreddit = self.session.get_subreddit(self.subreddit)
 
@@ -192,6 +246,27 @@ class Account(Base):
             return False
 
         return True
+    
+    def get_subreddits_list(self):
+        slist = []
+        for elem in (db.query(Comment.subreddit).distinct()):
+            slist.append(elem)
+            
+        return slist
+    
+    def get_nb_comments_from_subreddit(self, sub):
+        val = (db.query(Comment)
+            .filter_by(subreddit=sub)
+            .count()
+        )
+        return val
+    
+    def get_nb_subs_from_subreddit(self, sub):
+        val = (db.query(Submission)
+            .filter_by(subreddit=sub)
+            .count()
+        )
+        return val
 
     def get_comments_for_training(self, limit=None):
         comments = (db.query(Comment)
@@ -343,7 +418,7 @@ class Account(Base):
             if url_source.over_18:
                 title = "[NSFW] " + title
 
-            subreddit.submit(title, url=url_source.url, send_replies=False)
+            subreddit.submit(title, url=url_source.url, send_replies=False, resubmit=True)
         else:
             selftext = ""
             while len(selftext) < self.avg_selftext_len:
@@ -383,6 +458,22 @@ class TopTodayAccount(Account):
     def pick_submission_type(self):
         return "link"
 
+class LatestNAccount(Account):
+    __mapper_args__ = {
+        "polymorphic_identity": "LatestN",
+    }
+
+    def get_submissions_for_training(self, limit=350):
+        submissions = db.query(Submission).filter_by(subreddit=self.subreddit).order_by(Submission.date.desc()).limit(limit)
+        
+        return [submission for submission in submissions
+            if submission.author not in Settings["ignored users"]]
+
+    def train_from_submissions(self, get_new_submissions=True):
+        super(LatestNAccount, self).train_from_submissions(get_new_submissions)
+
+    def pick_submission_type(self):
+        return "link"
 
 class Comment(Base):
     __tablename__ = "comments"
