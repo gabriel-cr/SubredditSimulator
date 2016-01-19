@@ -137,9 +137,9 @@ class Account(Base):
 
     def check_for_comment_dup(self, sid=''):
         if db.query(Comment.id).filter(Comment.id==sid).count() > 0:
-            return 1
+            return True
         else:
-            return 0
+            return False
     
     def add_bulk_comments(self, new_comments, store_in_db=True):
         cnt = 0
@@ -148,7 +148,7 @@ class Account(Base):
             try:
                 comment = Comment(comment)
                 print(comment.date)
-                if self.check_for_comment_dup(comment.id) == 0:
+                if self.check_for_comment_dup(comment.id) == False:
                     db.add(comment)
                     add += 1
                 
@@ -166,7 +166,7 @@ class Account(Base):
         for s in subreddit.get_new(limit=None):
             sub = Submission(s)
             print s
-            self.add_bulk_comments(self.session.get_submission(submission_id=sub.id).all_comments)
+            self.add_bulk_comments(self.session.get_submission(submission_id=sub.id).comments)
 
     def get_comments_from_site(self, limit=None, store_in_db=True):
         subreddit = self.session.get_subreddit(self.subreddit)
@@ -463,7 +463,7 @@ class LatestNAccount(Account):
         "polymorphic_identity": "LatestN",
     }
 
-    def get_submissions_for_training(self, limit=350):
+    def get_submissions_for_training(self, limit=500):
         submissions = db.query(Submission).filter_by(subreddit=self.subreddit).order_by(Submission.date.desc()).limit(limit)
         
         return [submission for submission in submissions
@@ -474,6 +474,22 @@ class LatestNAccount(Account):
 
     def pick_submission_type(self):
         return "link"
+
+
+class userbotAccount(Account):
+    __mapper_args__ = {
+        "polymorphic_identity": "userbot",
+    }
+
+    def get_comments_for_training(self, limit=None):
+        # Using 'subreddit' as placeholder for username - should be changed
+        comments = (db.query(Comment)
+            .filter_by(author=self.subreddit)
+            .order_by(func.random())
+        )
+        valid_comments = [comment for comment in comments
+            if self.should_include_comment(comment)]
+        return valid_comments
 
 class Comment(Base):
     __tablename__ = "comments"

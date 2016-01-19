@@ -49,10 +49,16 @@ class Simulator(object):
         account = self.accounts[name]
         account.retrieve_comments()
 
-    def make_comment(self):
-        account = self.pick_account_to_comment()
-        account.train_from_comments()
-
+    def make_comment(self, name = ""):
+        if name == "":
+            account = self.pick_account_to_comment()
+        else:
+            account = self.accounts[name]
+        
+        if (account.special_class == "userbot"):
+            account.train_from_comments(False)
+        else:
+            account.train_from_comments(True)
         # get the newest submission in the subreddit
         subreddit = account.session.get_subreddit(self.subreddit)
         for submission in subreddit.get_new(limit=5):
