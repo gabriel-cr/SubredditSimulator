@@ -5,7 +5,7 @@ import random
 import re
 
 from database import db
-from models import Account, Settings, TopTodayAccount
+from models import Account, Settings, TopTodayAccount, LatestNAccount, userbotAccount
 
 
 class Simulator(object):
@@ -55,10 +55,11 @@ class Simulator(object):
         else:
             account = self.accounts[name]
         
-        if (account.special_class == "userbot"):
+        if (type(account) is userbotAccount):
             account.train_from_comments(False)
         else:
             account.train_from_comments(True)
+            
         # get the newest submission in the subreddit
         subreddit = account.session.get_subreddit(self.subreddit)
         for submission in subreddit.get_new(limit=5):
