@@ -26,7 +26,7 @@ class Simulator(object):
             pass
 
         accounts = sorted(accounts, key=lambda a: a.last_commented)
-        num_to_keep = len(accounts)
+        num_to_keep = int(len(accounts) * 0.5)
         return random.choice(accounts[:num_to_keep])
 
     def pick_account_to_submit(self):
@@ -59,7 +59,7 @@ class Simulator(object):
             account.train_from_comments(False)
         else:
             account.train_from_comments(True)
-            
+
         # get the newest submission in the subreddit
         subreddit = account.session.get_subreddit(self.subreddit)
         for submission in subreddit.get_new(limit=5):
@@ -89,9 +89,22 @@ class Simulator(object):
                 str(s[0]).encode('utf-8'),
                 self.mod_account.get_nb_comments_from_subreddit(s),
                 self.mod_account.get_nb_subs_from_subreddit(s))
+        
+        bots = "\n\nBot list:\n"
+        bots += "\nName | Can comment | Can submit\n"
+        bots += "---|---|----\n"
+        for a in self.accounts:
+            comms = self.accounts[a].can_comment
+            subs = self.accounts[a].can_submit
             
+            if comms or subs:
+                bots += "%s | %s | %s \n" % (a,
+                    "Yes" if comms else "No", 
+                    "Yes" if subs else "No")
 
         subreddit = session.get_subreddit(self.subreddit)
+
+        new_text = stats + bots
 
         start_delim = "[](/leaderboard-start)"
         end_delim = "[](/leaderboard-end)"
@@ -103,7 +116,7 @@ class Simulator(object):
         )
         new_sidebar = re.sub(
             replace_pattern,
-            "{}\n\n{}\n\n{}".format(start_delim, stats, end_delim),
+            "{}\n\n{}\n\n{}".format(start_delim, new_text, end_delim),
             current_sidebar,
         )
         subreddit.update_settings(description=new_sidebar)
